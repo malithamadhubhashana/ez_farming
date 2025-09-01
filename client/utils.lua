@@ -6,6 +6,40 @@ local FarmingUI = {
     currentMenu = nil
 }
 
+-- Global variables initialization
+PlantedCrops = PlantedCrops or {}
+PlantObjects = PlantObjects or {}
+ShopPeds = ShopPeds or {}
+FarmingZones = FarmingZones or {}
+
+-- Import functions from main client file
+local function ShowNotification(configKey, ...)
+    if not Config.Notifications or not Config.Notifications[configKey] then return end
+    
+    local notifConfig = Config.Notifications[configKey]
+    local message = string.format(notifConfig.message, ...)
+    
+    TriggerEvent('ez_farming:notify', message, notifConfig.type, notifConfig.duration)
+end
+
+-- Import HasItem function
+local function HasItem(item, amount)
+    local hasItem = false
+    TriggerServerEvent('ez_farming:checkItemServer', item, amount or 1, function(result)
+        hasItem = result
+    end)
+    return hasItem
+end
+
+-- Import menu functions
+local function OpenFarmingMenu(zoneIndex)
+    TriggerEvent('ez_farming:openFarmingMenuInternal', zoneIndex)
+end
+
+local function OpenShopMenu(shopIndex)
+    TriggerEvent('ez_farming:openShopMenuInternal', shopIndex)
+end
+
 -- Weather sync
 RegisterNetEvent('ez_farming:weatherSync')
 AddEventHandler('ez_farming:weatherSync', function(weather)
@@ -80,34 +114,93 @@ RegisterNUICallback('closeMenu', function(data, cb)
     cb('ok')
 end)
 
--- QB-Target event handlers
+-- QB-Target event handlers (more robust)
 RegisterNetEvent('ez_farming:openFarmingMenuTarget')
 AddEventHandler('ez_farming:openFarmingMenuTarget', function(data)
-    local zoneIndex = data.zoneIndex
+    local zoneIndex = nil
+    
+    -- Handle different data formats that qb-target might send
+    if type(data) == "table" then
+        zoneIndex = data.zoneIndex
+    elseif type(data) == "number" then
+        zoneIndex = data
+    end
+    
+    -- Fallback: try to get from entity or other means
+    if not zoneIndex then
+        -- Try to find closest farming zone
+        local playerCoords = GetEntityCoords(PlayerPedId())
+        local closestDistance = math.huge
+        local closestZone = nil
+        
+        if Config.FarmingZones then
+            for i, zone in ipairs(Config.FarmingZones) do
+                local distance = #(playerCoords - vector3(zone.coords.x, zone.coords.y, zone.coords.z))
+                if distance < closestDistance and distance < 10.0 then
+                    closestDistance = distance
+                    closestZone = i
+                end
+            end
+        end
+        zoneIndex = closestZone
+    end
+    
     if zoneIndex then
         OpenFarmingMenu(zoneIndex)
+    else
+        print('^1[EZ Farming] Error: Could not determine farming zone index')
     end
 end)
 
 RegisterNetEvent('ez_farming:openShopMenuTarget')
 AddEventHandler('ez_farming:openShopMenuTarget', function(data)
-    local shopIndex = data.shopIndex
+    local shopIndex = nil
+    
+    -- Handle different data formats that qb-target might send
+    if type(data) == "table" then
+        shopIndex = data.shopIndex
+    elseif type(data) == "number" then
+        shopIndex = data
+    end
+    
     if shopIndex then
         OpenShopMenu(shopIndex)
+    else
+        print('^1[EZ Farming] Error: Could not determine shop index')
+    end
     end
 end)
 
 RegisterNetEvent('ez_farming:plantActionTarget')
 AddEventHandler('ez_farming:plantActionTarget', function(data)
-    local action = data.action
-    local plantId = data.plantId
+    local action = nil
+    local plantId = nil
     
-    if action == 'water' then
+    -- Handle different data formats that qb-target might send
+    if type(data) == "table" then
+        action = data.action
+        plantId = data.plantId
+    end
+    
+    -- Validate data
+    if not action or not plantId then
+        print('^1[EZ Farming] Error: Missing action or plantId in plant target event')
+        return
+    end
+    
+    if action == 'water_plant' or action == 'water' then
         WaterPlant(plantId)
-    elseif action == 'fertilize' then
+    elseif action == 'fertilize_plant' or action == 'fertilize' then
         FertilizePlant(plantId)
-    elseif action == 'harvest' then
+    elseif action == 'harvest_plant' or action == 'harvest' then
         HarvestPlant(plantId)
+    elseif action == 'plant_info' then
+        local plant = PlantedCrops[plantId]
+        if plant then
+            ShowPlantInfo(plant)
+        end
+    else
+        print('^1[EZ Farming] Unknown plant action: ' .. tostring(action))
     end
 end)
 
@@ -192,6 +285,7 @@ end
 
 function UpdatePlantVisuals()
     if not PlantObjects then PlantObjects = {} end
+    if not PlantedCrops then return end -- Exit if PlantedCrops is nil
     
     for plantId, plant in pairs(PlantedCrops) do
         if PlantObjects[plantId] then
@@ -502,89 +596,124 @@ CreateThread(function()
     
     print('^2[EZ Farming]^7 Using target system: ' .. targetResource)
     
-    -- Add target zones for farming areas
-    for i, zone in ipairs(Config.FarmingZones) do
-        local options = {
-            {
-                name = "ez_farming_zone_" .. i,
-                icon = "fas fa-seedling",
-                label = "Open Farming Menu",
-                onSelect = function()
-                    OpenFarmingMenu(i)
-                end,
-                distance = Config.MaxDistance
-            }
-        }
-        
-        if targetResource == 'ox_target' then
-            exports.ox_target:addBoxZone({
-                coords = zone.coords,
-                size = zone.size,
-                rotation = zone.rotation or 0,
-                debug = Config.Debug,
-                options = options
-            })
-        elseif targetResource == 'qb-target' then
-            exports['qb-target']:AddBoxZone("farming_zone_" .. i, zone.coords, zone.size.x, zone.size.y, {
-                name = "farming_zone_" .. i,
-                heading = zone.rotation or 0,
-                debugPoly = Config.Debug,
-                minZ = zone.coords.z - zone.size.z/2,
-                maxZ = zone.coords.z + zone.size.z/2,
-            }, {
-                options = {
-                    {
-                        type = "client",
-                        event = "ez_farming:openFarmingMenuTarget",
-                        icon = "fas fa-seedling",
-                        label = "Open Farming Menu",
-                        zoneIndex = i
-                    }
-                },
-                distance = Config.MaxDistance
-            })
+    -- Debug: Check if Config tables exist
+    if Config.Debug then
+        print('^2[EZ Farming Debug]^7 Config.FarmingZones exists: ' .. tostring(Config.FarmingZones ~= nil))
+        if Config.FarmingZones then
+            print('^2[EZ Farming Debug]^7 Number of farming zones: ' .. #Config.FarmingZones)
+        end
+        print('^2[EZ Farming Debug]^7 Config.Shops exists: ' .. tostring(Config.Shops ~= nil))
+        if Config.Shops then
+            print('^2[EZ Farming Debug]^7 Number of shops: ' .. #Config.Shops)
         end
     end
     
-    -- Add target for shop peds
-    for i, shop in ipairs(Config.Shops) do
-        if shop.ped then
-            CreateThread(function()
-                Wait(3000) -- Wait for peds to spawn
-                local ped = ShopPeds[i]
-                if ped and DoesEntityExist(ped) then
-                    local options = {
-                        {
-                            name = "ez_farming_shop_" .. i,
-                            icon = "fas fa-shopping-cart",
-                            label = "Open " .. shop.name,
-                            onSelect = function()
-                                OpenShopMenu(i)
-                            end,
-                            distance = Config.MaxDistance
-                        }
+    -- Add target zones for farming areas
+    if Config.FarmingZones then
+        for i, zone in ipairs(Config.FarmingZones) do
+            if zone and zone.coords then
+                local options = {
+                    {
+                        name = "ez_farming_zone_" .. i,
+                        icon = "fas fa-seedling",
+                        label = "Open Farming Menu",
+                        onSelect = function()
+                            OpenFarmingMenu(i)
+                        end,
+                        distance = Config.MaxDistance
                     }
+                }
+                
+                if targetResource == 'ox_target' then
+                    exports.ox_target:addBoxZone({
+                        coords = zone.coords,
+                        size = zone.size,
+                        rotation = zone.rotation or 0,
+                        debug = Config.Debug,
+                        options = options
+                    })
+                elseif targetResource == 'qb-target' then
+                    -- QB-Target requires different structure with safety checks
+                    local coords = vector3(zone.coords.x or 0, zone.coords.y or 0, zone.coords.z or 0)
+                    local sizeX = zone.size and zone.size.x or 5.0
+                    local sizeY = zone.size and zone.size.y or 5.0
+                    local sizeZ = zone.size and zone.size.z or 2.0
+                    local heading = zone.rotation or 0.0
                     
-                    if targetResource == 'ox_target' then
-                        exports.ox_target:addLocalEntity(ped, options)
-                    elseif targetResource == 'qb-target' then
-                        exports['qb-target']:AddTargetEntity(ped, {
+                    if Config.Debug then
+                        print(string.format('^2[EZ Farming Debug]^7 Adding QB-Target zone %d at %s', i, tostring(coords)))
+                    end
+                    
+                    pcall(function()
+                        exports['qb-target']:AddBoxZone("farming_zone_" .. i, coords, sizeX, sizeY, {
+                            name = "farming_zone_" .. i,
+                            heading = heading,
+                            debugPoly = Config.Debug,
+                            minZ = coords.z - sizeZ / 2,
+                            maxZ = coords.z + sizeZ / 2,
+                        }, {
                             options = {
                                 {
                                     type = "client",
-                                    event = "ez_farming:openShopMenuTarget",
-                                    icon = "fas fa-shopping-cart",
-                                    label = "Open " .. shop.name,
-                                    shopIndex = i
+                                    event = "ez_farming:openFarmingMenuTarget",
+                                    icon = "fas fa-seedling",
+                                    label = "Open Farming Menu",
+                                    zoneIndex = i
                                 }
                             },
                             distance = Config.MaxDistance
                         })
+                    end)
+                    
+                    if Config.Debug then
+                        print('^2[EZ Farming Debug]^7 Successfully added QB-Target zone: ' .. i)
                     end
                 end
-            end)
-        end
-    end
+            end -- End if zone and zone.coords
+        end -- End for zones
+    end -- End if Config.FarmingZones
+    
+    -- Add target for shop peds
+    if Config.Shops then
+        for i, shop in ipairs(Config.Shops) do
+            if shop.ped then
+                CreateThread(function()
+                    Wait(3000) -- Wait for peds to spawn
+                    if ShopPeds and ShopPeds[i] then
+                        local ped = ShopPeds[i]
+                        if ped and DoesEntityExist(ped) then
+                            if targetResource == 'ox_target' then
+                                local options = {
+                                    {
+                                        name = "ez_farming_shop_" .. i,
+                                        icon = "fas fa-shopping-cart",
+                                        label = "Open " .. shop.name,
+                                        onSelect = function()
+                                            OpenShopMenu(i)
+                                        end,
+                                        distance = Config.MaxDistance
+                                    }
+                                }
+                                exports.ox_target:addLocalEntity(ped, options)
+                            elseif targetResource == 'qb-target' then
+                                exports['qb-target']:AddTargetEntity(ped, {
+                                    options = {
+                                        {
+                                            type = "client",
+                                            event = "ez_farming:openShopMenuTarget",
+                                            icon = "fas fa-shopping-cart",
+                                            label = "Open " .. shop.name,
+                                            shopIndex = i
+                                        }
+                                    },
+                                    distance = Config.MaxDistance
+                        })
+                    end
+                end
+                end) -- End CreateThread
+            end -- End if shop.ped
+        end -- End for shop loop
+    end -- End if Config.Shops
     
     -- Add dynamic targets for planted crops
     CreateThread(function()
@@ -594,31 +723,35 @@ CreateThread(function()
             Wait(5000) -- Check every 5 seconds
             
             -- Remove targets for harvested plants
-            for plantId, _ in pairs(addedTargets) do
-                if not PlantedCrops[plantId] then
-                    if targetResource == 'ox_target' then
-                        exports.ox_target:removeZone('plant_' .. plantId)
-                    elseif targetResource == 'qb-target' then
-                        exports['qb-target']:RemoveZone('plant_' .. plantId)
+            if addedTargets then
+                for plantId, _ in pairs(addedTargets) do
+                    if not PlantedCrops or not PlantedCrops[plantId] then
+                        if targetResource == 'ox_target' then
+                            exports.ox_target:removeZone('plant_' .. plantId)
+                        elseif targetResource == 'qb-target' then
+                            exports['qb-target']:RemoveZone('plant_' .. plantId)
+                        end
+                        addedTargets[plantId] = nil
                     end
-                    addedTargets[plantId] = nil
                 end
             end
             
             -- Add targets for new plants
             local playerCoords = GetEntityCoords(PlayerPedId())
-            for plantId, plant in pairs(PlantedCrops) do
-                if not addedTargets[plantId] and #(playerCoords - plant.coords) < 50.0 then
-                    local cropConfig = Config.Crops[plant.cropType]
-                    local options = {}
-                    
-                    if plant.stage >= plant.maxStages then
-                        table.insert(options, {
-                            name = "harvest_plant",
-                            icon = "fas fa-hand-paper",
-                            label = "Harvest " .. cropConfig.label,
-                            onSelect = function()
-                                InteractWithPlant(plantId)
+            if PlantedCrops and Config.Crops then
+                for plantId, plant in pairs(PlantedCrops) do
+                    if not addedTargets[plantId] and #(playerCoords - plant.coords) < 50.0 then
+                        local cropConfig = Config.Crops[plant.cropType]
+                        if cropConfig then
+                            local options = {}
+                            
+                            if plant.stage >= plant.maxStages then
+                                table.insert(options, {
+                                    name = "harvest_plant",
+                                    icon = "fas fa-hand-paper",
+                                    label = "Harvest " .. cropConfig.label,
+                                    onSelect = function()
+                                        InteractWithPlant(plantId)
                             end,
                             canInteract = function()
                                 return HasItem(Config.Tools.hoe.item)
@@ -691,7 +824,7 @@ CreateThread(function()
                                 })
                             end
                             
-                            exports['qb-target']:AddCircleZone('plant_' .. plantId, plant.coords, 1.0, {
+                            exports['qb-target']:AddCircleZone('plant_' .. plantId, vector3(plant.coords.x, plant.coords.y, plant.coords.z), 1.0, {
                                 name = 'plant_' .. plantId,
                                 debugPoly = Config.Debug,
                             }, {
@@ -701,12 +834,14 @@ CreateThread(function()
                         end
                         
                         addedTargets[plantId] = true
-                    end
-                end
-            end
-        end
-    end)
-end)
+                    end -- End if #options > 0
+                        end -- End if cropConfig
+                    end -- End if not addedTargets[plantId]
+                end -- End for plantId, plant in pairs(PlantedCrops)
+            end -- End if PlantedCrops and Config.Crops
+        end -- End while true
+    end) -- End CreateThread
+end) -- End main CreateThread
 
 -- Target events
 RegisterNetEvent('ez_farming:openFarmingMenu')
@@ -752,6 +887,7 @@ if Config.Debug then
 end
 
 function GetTableLength(t)
+    if not t then return 0 end -- Add nil check
     local count = 0
     for _ in pairs(t) do count = count + 1 end
     return count

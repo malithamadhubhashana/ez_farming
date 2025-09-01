@@ -316,6 +316,46 @@ function InteractWithPlant(plantId)
     end
 end
 
+-- Simple animation functions
+function PlayWateringAnimation()
+    local playerPed = PlayerPedId()
+    TaskStartScenarioInPlace(playerPed, "WORLD_HUMAN_GARDENER_PLANT", 0, true)
+    Wait(3000)
+    ClearPedTasks(playerPed)
+end
+
+function PlayFertilizingAnimation()
+    local playerPed = PlayerPedId()
+    TaskStartScenarioInPlace(playerPed, "WORLD_HUMAN_GARDENER_PLANT", 0, true)
+    Wait(2000)
+    ClearPedTasks(playerPed)
+end
+
+function PlayHarvestingAnimation()
+    local playerPed = PlayerPedId()
+    TaskStartScenarioInPlace(playerPed, "WORLD_HUMAN_GARDENER_PLANT", 0, true)
+    Wait(4000)
+    ClearPedTasks(playerPed)
+end
+
+-- Simple notification function
+function ShowNotification(key, ...)
+    local message = string.format("Farming: %s", key)
+    if ... then
+        message = string.format(message, ...)
+    end
+    TriggerEvent('chat:addMessage', {
+        color = {0, 255, 0},
+        args = {"Farming", message}
+    })
+end
+
+-- Simple HasItem function
+function HasItem(item, amount)
+    -- This is a placeholder - the main client file should handle this
+    return true
+end
+
 -- Export functions for use in other files
 exports('AddDrawText', AddDrawText)
 exports('RemoveDrawText', RemoveDrawText)
