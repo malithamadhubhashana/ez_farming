@@ -14,10 +14,13 @@ FarmingZones = FarmingZones or {}
 
 -- Import functions from main client file
 local function ShowNotification(configKey, ...)
-    if not Config.Notifications or not Config.Notifications[configKey] then return end
+    if not Config or not Config.Notifications or not Config.Notifications[configKey] then 
+        print('^3[EZ Farming]^7 Notification config missing for: ' .. tostring(configKey))
+        return 
+    end
     
     local notifConfig = Config.Notifications[configKey]
-    local message = string.format(notifConfig.message, ...)
+    local message = string.format(notifConfig.message or 'No message', ...)
     
     TriggerEvent('ez_farming:notify', message, notifConfig.type, notifConfig.duration)
 end
@@ -119,11 +122,26 @@ RegisterNetEvent('ez_farming:openFarmingMenuTarget')
 AddEventHandler('ez_farming:openFarmingMenuTarget', function(data)
     local zoneIndex = nil
     
+    -- Debug what data we receive
+    if Config and Config.Debug then
+        print('^2[EZ Farming Debug]^7 openFarmingMenuTarget data type: ' .. type(data))
+        if type(data) == "table" then
+            for k, v in pairs(data) do
+                print('^2[EZ Farming Debug]^7 data[' .. tostring(k) .. '] = ' .. tostring(v))
+            end
+        else
+            print('^2[EZ Farming Debug]^7 data value: ' .. tostring(data))
+        end
+    end
+    
     -- Handle different data formats that qb-target might send
     if type(data) == "table" then
-        zoneIndex = data.zoneIndex
+        -- QB-target sends data in different formats, try multiple keys
+        zoneIndex = data.zoneIndex or data.zone or data.id or data.index
     elseif type(data) == "number" then
         zoneIndex = data
+    elseif type(data) == "string" then
+        zoneIndex = tonumber(data)
     end
     
     -- Fallback: try to get from entity or other means
@@ -156,18 +174,31 @@ RegisterNetEvent('ez_farming:openShopMenuTarget')
 AddEventHandler('ez_farming:openShopMenuTarget', function(data)
     local shopIndex = nil
     
+    -- Debug what data we receive
+    if Config and Config.Debug then
+        print('^2[EZ Farming Debug]^7 openShopMenuTarget data type: ' .. type(data))
+        if type(data) == "table" then
+            for k, v in pairs(data) do
+                print('^2[EZ Farming Debug]^7 data[' .. tostring(k) .. '] = ' .. tostring(v))
+            end
+        else
+            print('^2[EZ Farming Debug]^7 data value: ' .. tostring(data))
+        end
+    end
+    
     -- Handle different data formats that qb-target might send
     if type(data) == "table" then
-        shopIndex = data.shopIndex
+        shopIndex = data.shopIndex or data.shop or data.id or data.index
     elseif type(data) == "number" then
         shopIndex = data
+    elseif type(data) == "string" then
+        shopIndex = tonumber(data)
     end
     
     if shopIndex then
         OpenShopMenu(shopIndex)
     else
         print('^1[EZ Farming] Error: Could not determine shop index')
-    end
     end
 end)
 
@@ -176,24 +207,64 @@ AddEventHandler('ez_farming:plantActionTarget', function(data)
     local action = nil
     local plantId = nil
     
+    -- Debug what data we receive
+    if Config and Config.Debug then
+        print('^2[EZ Farming Debug]^7 plantActionTarget data type: ' .. type(data))
+        if type(data) == "table" then
+            for k, v in pairs(data) do
+                print('^2[EZ Farming Debug]^7 data[' .. tostring(k) .. '] = ' .. tostring(v))
+            end
+        else
+            print('^2[EZ Farming Debug]^7 data value: ' .. tostring(data))
+        end
+    end
+    
     -- Handle different data formats that qb-target might send
     if type(data) == "table" then
         action = data.action
         plantId = data.plantId
+        
+        -- QB-target might send data differently, try alternatives
+        if not action then
+            action = data.type or data.actionType
+        end
+        if not plantId then
+            plantId = data.id or data.plant or data.target
+        end
     end
     
     -- Validate data
     if not action or not plantId then
-        print('^1[EZ Farming] Error: Missing action or plantId in plant target event')
+        print('^1[EZ Farming] Error: Missing action (' .. tostring(action) .. ') or plantId (' .. tostring(plantId) .. ') in plant target event')
+        return
+    end
+    
+    -- Safety check for Config
+    if not Config or not Config.Tools then
+        print('^1[EZ Farming] Error: Config or Config.Tools not available')
         return
     end
     
     if action == 'water_plant' or action == 'water' then
-        WaterPlant(plantId)
+        if HasItem(Config.Tools.watering_can.item) then
+            TriggerServerEvent('ez_farming:waterPlant', plantId)
+            PlayWateringAnimation()
+        else
+            ShowNotification('no_tool', Config.Tools.watering_can.label)
+        end
     elseif action == 'fertilize_plant' or action == 'fertilize' then
-        FertilizePlant(plantId)
+        if HasItem(Config.Tools.fertilizer.item) then
+            TriggerServerEvent('ez_farming:fertilizePlant', plantId)
+            PlayFertilizingAnimation()
+        else
+            ShowNotification('no_tool', Config.Tools.fertilizer.label)
+        end
     elseif action == 'harvest_plant' or action == 'harvest' then
-        HarvestPlant(plantId)
+        if HasItem(Config.Tools.hoe.item) then
+            TriggerServerEvent('ez_farming:harvestCrop', plantId)
+        else
+            ShowNotification('no_tool', Config.Tools.hoe.label)
+        end
     elseif action == 'plant_info' then
         local plant = PlantedCrops[plantId]
         if plant then
@@ -211,9 +282,9 @@ RegisterNUICallback('menuAction', function(data, cb)
     if FarmingUI.currentMenu then
         if string.find(action, 'plant_') then
             local cropType = string.gsub(action, 'plant_', '')
-            PlantCrop(cropType, FarmingUI.currentMenu.zoneIndex)
+            TriggerServerEvent('ez_farming:plantCrop', cropType, FarmingUI.currentMenu.zoneIndex)
         elseif action == 'zone_info' then
-            ShowZoneInfo(FarmingUI.currentMenu.zoneIndex)
+            TriggerServerEvent('ez_farming:getZoneInfo', FarmingUI.currentMenu.zoneIndex)
         end
     end
     
@@ -260,6 +331,8 @@ end)
 
 -- Plant visual effects system
 function CreatePlantObject(plantId, plant)
+    if not Config or not Config.Crops then return nil end
+    
     local cropConfig = Config.Crops[plant.cropType]
     if not cropConfig or not cropConfig.model then return end
     
@@ -309,11 +382,14 @@ end
 
 -- Enhanced plant interaction system
 function GetPlantInteractionOptions(plantId)
+    if not Config or not Config.Crops then return {} end
+    
     local plant = PlantedCrops[plantId]
     if not plant then return {} end
     
     local options = {}
     local cropConfig = Config.Crops[plant.cropType]
+    if not cropConfig then return {} end
     
     if plant.stage >= plant.maxStages then
         table.insert(options, {
@@ -436,7 +512,17 @@ end
 
 -- Information display system
 function ShowPlantInfo(plant)
+    if not Config or not Config.Crops then 
+        print('^1[EZ Farming] Error: Config or Config.Crops not available')
+        return 
+    end
+    
     local cropConfig = Config.Crops[plant.cropType]
+    if not cropConfig then
+        print('^1[EZ Farming] Error: Crop config not found for type: ' .. tostring(plant.cropType))
+        return
+    end
+    
     local growthProgress = math.floor((plant.stage / plant.maxStages) * 100)
     
     local info = string.format([[
@@ -469,6 +555,8 @@ function ShowPlantInfo(plant)
 end
 
 function GetWeatherEffectDescription()
+    if not Config or not Config.Weather or not Config.Weather.effects then return "None" end
+    
     local effects = Config.Weather.effects[CurrentWeather]
     if not effects then return "None" end
     
@@ -496,14 +584,22 @@ AddEventHandler('ez_farming:notify', function(message, type, duration)
     type = type or 'info'
     duration = duration or 5000
     
-    if Framework == 'esx' then
+    -- Safety check for Framework variable
+    local framework = Framework or 'unknown'
+    
+    if framework == 'esx' and ESX then
         ESX.ShowNotification(message)
-    elseif Framework == 'qb' then
+    elseif framework == 'qb' and QBCore then
         QBCore.Functions.Notify(message, type, duration)
-    elseif Framework == 'qbx' then
-        exports.qbx_core:Notify(message, type, duration)
+    elseif framework == 'qbx' then
+        local success, err = pcall(function()
+            exports.qbx_core:Notify(message, type, duration)
+        end)
+        if not success then
+            print('^3[EZ Farming]^7 QBX notification failed: ' .. tostring(err))
+        end
     else
-        -- Custom notification for standalone
+        -- Custom notification for standalone or fallback
         SendNUIMessage({
             type = 'notification',
             data = {
@@ -559,10 +655,22 @@ end)
 
 RegisterNetEvent('ez_farming:harvestSuccess')
 AddEventHandler('ez_farming:harvestSuccess', function(plantId, harvestData)
+    if not Config then 
+        print("[ez_farming] Config not loaded yet, waiting...")
+        return 
+    end
+    
     FarmingStats.plantsHarvested = FarmingStats.plantsHarvested + 1
     -- Original harvest success logic
     PlantedCrops[plantId] = nil
-    ShowNotification('harvest_success', Config.Crops[harvestData.cropType].label, harvestData.amount)
+    
+    -- Safe config access for crop label
+    local cropLabel = 'Unknown Crop'
+    if Config.Crops and Config.Crops[harvestData.cropType] and Config.Crops[harvestData.cropType].label then
+        cropLabel = Config.Crops[harvestData.cropType].label
+    end
+    
+    ShowNotification('harvest_success', cropLabel, harvestData.amount)
     
     -- Play harvest animation and effects
     PlayHarvestingAnimation()
@@ -578,9 +686,24 @@ end)
 
 -- Target system integration (if qb-target or ox_target is available)
 CreateThread(function()
-    if not Config.UseTarget then return end
-    
     Wait(2000) -- Wait for resources to load
+    
+    -- Wait for Config to be available
+    local attempts = 0
+    while not Config and attempts < 50 do
+        Wait(100)
+        attempts = attempts + 1
+    end
+    
+    if not Config then
+        print('^1[EZ Farming] Error: Config not loaded, cannot initialize target system')
+        return
+    end
+    
+    if not Config.UseTarget then 
+        print('^3[EZ Farming]^7 Target system disabled in config')
+        return 
+    end
     
     local targetResource = nil
     if GetResourceState('ox_target') == 'started' then
@@ -655,10 +778,9 @@ CreateThread(function()
                             options = {
                                 {
                                     type = "client",
-                                    event = "ez_farming:openFarmingMenuTarget",
+                                    event = "ez_farming:openFarmingZone" .. i,
                                     icon = "fas fa-seedling",
-                                    label = "Open Farming Menu",
-                                    zoneIndex = i
+                                    label = "Open Farming Menu"
                                 }
                             },
                             distance = Config.MaxDistance
@@ -700,16 +822,16 @@ CreateThread(function()
                                     options = {
                                         {
                                             type = "client",
-                                            event = "ez_farming:openShopMenuTarget",
+                                            event = "ez_farming:openShop" .. i,
                                             icon = "fas fa-shopping-cart",
-                                            label = "Open " .. shop.name,
-                                            shopIndex = i
+                                            label = "Open " .. shop.name
                                         }
                                     },
                                     distance = Config.MaxDistance
-                        })
-                    end
-                end
+                                })
+                            end
+                        end -- End if ped and DoesEntityExist(ped)
+                    end -- End if ShopPeds and ShopPeds[i]
                 end) -- End CreateThread
             end -- End if shop.ped
         end -- End for shop loop
@@ -751,13 +873,17 @@ CreateThread(function()
                                     icon = "fas fa-hand-paper",
                                     label = "Harvest " .. cropConfig.label,
                                     onSelect = function()
-                                        InteractWithPlant(plantId)
-                            end,
-                            canInteract = function()
-                                return HasItem(Config.Tools.hoe.item)
+                                        if HasItem(Config.Tools.hoe.item) then
+                                            TriggerServerEvent('ez_farming:harvestCrop', plantId)
+                                        else
+                                            ShowNotification('no_tool', Config.Tools.hoe.label)
+                                        end
+                                    end,
+                                    canInteract = function()
+                                        return HasItem(Config.Tools.hoe.item)
+                                    end
+                                })
                             end
-                        })
-                    end
                     
                     if plant.needsWater then
                         table.insert(options, {
@@ -811,17 +937,44 @@ CreateThread(function()
                                 options = options
                             })
                         elseif targetResource == 'qb-target' then
-                            -- Convert ox_target options format to qb-target format
+                            -- For QB-target, use unique event names to avoid data passing issues
                             local qbOptions = {}
                             for _, option in pairs(options) do
+                                local eventName = "ez_farming:" .. option.name .. "_" .. plantId
+                                
                                 table.insert(qbOptions, {
                                     type = "client",
-                                    event = "ez_farming:plantActionTarget",
+                                    event = eventName,
                                     icon = option.icon,
-                                    label = option.label,
-                                    action = option.name,
-                                    plantId = plantId
+                                    label = option.label
                                 })
+                                
+                                -- Register the event handler dynamically
+                                RegisterNetEvent(eventName)
+                                AddEventHandler(eventName, function()
+                                    if option.name == "harvest_plant" then
+                                        if HasItem(Config.Tools.hoe.item) then
+                                            TriggerServerEvent('ez_farming:harvestCrop', plantId)
+                                        else
+                                            ShowNotification('no_tool', Config.Tools.hoe.label)
+                                        end
+                                    elseif option.name == "water_plant" then
+                                        if HasItem(Config.Tools.watering_can.item) then
+                                            TriggerServerEvent('ez_farming:waterPlant', plantId)
+                                            PlayWateringAnimation()
+                                        else
+                                            ShowNotification('no_tool', Config.Tools.watering_can.label)
+                                        end
+                                    elseif option.name == "fertilize_plant" then
+                                        TriggerServerEvent('ez_farming:fertilizePlant', plantId)
+                                        PlayFertilizingAnimation()
+                                    elseif option.name == "plant_info" then
+                                        local plant = PlantedCrops[plantId]
+                                        if plant then
+                                            ShowPlantInfo(plant)
+                                        end
+                                    end
+                                end)
                             end
                             
                             exports['qb-target']:AddCircleZone('plant_' .. plantId, vector3(plant.coords.x, plant.coords.y, plant.coords.z), 1.0, {
@@ -844,47 +997,44 @@ CreateThread(function()
 end) -- End main CreateThread
 
 -- Target events
-RegisterNetEvent('ez_farming:openFarmingMenu')
-AddEventHandler('ez_farming:openFarmingMenu', function(data)
-    OpenFarmingMenu(data.zoneIndex)
-end)
-
-RegisterNetEvent('ez_farming:openFarmingMenuTarget')
-AddEventHandler('ez_farming:openFarmingMenuTarget', function(data)
-    OpenFarmingMenu(data.zoneIndex)
-end)
-
-RegisterNetEvent('ez_farming:openShopMenuTarget')
-AddEventHandler('ez_farming:openShopMenuTarget', function(data)
-    OpenShopMenu(data.shopIndex)
-end)
-
 -- Enhanced debug system
-if Config.Debug then
-    CreateThread(function()
-        while true do
-            Wait(1000)
-            
-            -- Debug info on screen
-            local playerCoords = GetEntityCoords(PlayerPedId())
-            local debugText = string.format(
-                "Framework: %s\nWeather: %s\nSeason: %s\nPlants Loaded: %d\nCoords: %.2f, %.2f, %.2f",
-                Framework or 'Unknown',
-                CurrentWeather,
-                CurrentSeason,
-                GetTableLength(PlantedCrops),
-                playerCoords.x, playerCoords.y, playerCoords.z
-            )
-            
-            SetTextFont(0)
-            SetTextScale(0.3, 0.3)
-            SetTextColour(255, 255, 255, 255)
-            SetTextEntry("STRING")
-            AddTextComponentSubstringPlayerName(debugText)
-            DrawText(0.01, 0.01)
-        end
-    end)
-end
+CreateThread(function()
+    Wait(1000) -- Wait for Config to load
+    
+    -- Wait for Config to be available
+    local attempts = 0
+    while not Config and attempts < 50 do
+        Wait(100)
+        attempts = attempts + 1
+    end
+    
+    if not Config or not Config.Debug then 
+        return -- Exit if no debug mode
+    end
+    
+    -- Debug system loop
+    while true do
+        Wait(1000)
+        
+        -- Debug info on screen
+        local playerCoords = GetEntityCoords(PlayerPedId())
+        local debugText = string.format(
+            "Framework: %s\nWeather: %s\nSeason: %s\nPlants Loaded: %d\nCoords: %.2f, %.2f, %.2f",
+            Framework or 'Unknown',
+            CurrentWeather,
+            CurrentSeason,
+            GetTableLength(PlantedCrops),
+            playerCoords.x, playerCoords.y, playerCoords.z
+        )
+        
+        SetTextFont(0)
+        SetTextScale(0.3, 0.3)
+        SetTextColour(255, 255, 255, 255)
+        SetTextEntry("STRING")
+        AddTextComponentSubstringPlayerName(debugText)
+        DrawText(0.01, 0.01)
+    end
+end)
 
 function GetTableLength(t)
     if not t then return 0 end -- Add nil check
@@ -892,5 +1042,56 @@ function GetTableLength(t)
     for _ in pairs(t) do count = count + 1 end
     return count
 end
+
+-- Generate individual event handlers for QB-target zones and shops
+CreateThread(function()
+    Wait(1000) -- Wait for Config to load
+    
+    -- Safety check for Config
+    local attempts = 0
+    while not Config and attempts < 50 do
+        Wait(100)
+        attempts = attempts + 1
+    end
+    
+    if not Config then
+        print('^1[EZ Farming] Error: Config not loaded after 5 seconds')
+        return
+    end
+    
+    -- Create individual event handlers for farming zones
+    if Config.FarmingZones then
+        for i = 1, #Config.FarmingZones do
+            local eventName = 'ez_farming:openFarmingZone' .. i
+            RegisterNetEvent(eventName)
+            AddEventHandler(eventName, function()
+                if Config and Config.Debug then
+                    print('^2[EZ Farming Debug]^7 Opening farming zone ' .. i)
+                end
+                OpenFarmingMenu(i)
+            end)
+        end
+        if Config.Debug then
+            print('^2[EZ Farming Debug]^7 Registered ' .. #Config.FarmingZones .. ' farming zone events')
+        end
+    end
+    
+    -- Create individual event handlers for shops
+    if Config.Shops then
+        for i = 1, #Config.Shops do
+            local eventName = 'ez_farming:openShop' .. i
+            RegisterNetEvent(eventName)
+            AddEventHandler(eventName, function()
+                if Config and Config.Debug then
+                    print('^2[EZ Farming Debug]^7 Opening shop ' .. i)
+                end
+                OpenShopMenu(i)
+            end)
+        end
+        if Config.Debug then
+            print('^2[EZ Farming Debug]^7 Registered ' .. #Config.Shops .. ' shop events')
+        end
+    end
+end)
 
 print('^2[EZ Farming]^7 Client utilities loaded successfully!')

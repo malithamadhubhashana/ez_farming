@@ -4,9 +4,25 @@ local Framework = nil
 local FarmingZones = {}
 local PlantedCrops = {}
 local ShopPeds = {}
+local ConfigReady = false
+
+-- Wait for Config to be available
+CreateThread(function()
+    while not Config do
+        print("[ez_farming] Waiting for Config to load...")
+        Wait(100)
+    end
+    ConfigReady = true
+    print("^2[ez_farming]^7 Config loaded successfully!")
+end)
 
 -- Framework Detection and Initialization
 CreateThread(function()
+    -- Wait for Config to be ready
+    while not ConfigReady do 
+        Wait(100) 
+    end
+    
     if Config.Framework == 'auto' then
         if GetResourceState('es_extended') == 'started' then
             Framework = 'esx'
@@ -198,6 +214,11 @@ end
 
 -- Main Initialization
 function InitializeFarming()
+    if not ConfigReady or not Config then
+        print("[ez_farming] Config not ready in InitializeFarming")
+        return
+    end
+    
     CreateBlips()
     SetupFarmingZones()
     SetupShops()
@@ -214,6 +235,11 @@ function InitializeFarming()
 end
 
 function CreateBlips()
+    if not Config or not Config.FarmingZones or not Config.Shops then
+        print("[ez_farming] Config not available for CreateBlips")
+        return
+    end
+    
     for i, zone in ipairs(Config.FarmingZones) do
         if zone.blip and zone.blip.enabled then
             local blip = AddBlipForCoord(zone.coords.x, zone.coords.y, zone.coords.z)
@@ -243,6 +269,11 @@ function CreateBlips()
 end
 
 function SetupFarmingZones()
+    if not Config or not Config.FarmingZones then
+        print("[ez_farming] Config not available for SetupFarmingZones")
+        return
+    end
+    
     for i, zone in ipairs(Config.FarmingZones) do
         FarmingZones[i] = {
             coords = zone.coords,
@@ -256,6 +287,11 @@ function SetupFarmingZones()
 end
 
 function SetupShops()
+    if not Config or not Config.Shops then
+        print("[ez_farming] Config not available for SetupShops")
+        return
+    end
+    
     for i, shop in ipairs(Config.Shops) do
         if shop.ped then
             local model = GetHashKey(shop.ped.model)
@@ -416,13 +452,38 @@ end
 
 -- Farming menu functions
 function OpenFarmingMenu(zoneIndex)
+    if not Config then 
+        print("[ez_farming] Config not loaded yet, please try again...")
+        if Framework and Framework == 'qb' then
+            QBCore.Functions.Notify("System not ready yet, please try again...", "error")
+        elseif Framework and Framework == 'esx' then
+            ESX.ShowNotification("System not ready yet, please try again...")
+        else
+            -- Standalone notification
+            BeginTextCommandThefeedPost("STRING")
+            AddTextComponentSubstringPlayerName("System not ready yet, please try again...")
+            EndTextCommandThefeedPostTicker(false, true)
+        end
+        return 
+    end
+    
+    if not Config.Crops then
+        print("[ez_farming] Config.Crops not available")
+        return
+    end
+    
     local zone = FarmingZones[zoneIndex]
+    if not zone then
+        print("[ez_farming] Invalid zone index: " .. tostring(zoneIndex))
+        return
+    end
+    
     local elements = {}
     
     -- Add plant option for each allowed crop
     for _, cropType in ipairs(zone.allowedCrops) do
         local cropConfig = Config.Crops[cropType]
-        if HasItem(cropConfig.seedItem) then
+        if cropConfig and HasItem(cropConfig.seedItem) then
             table.insert(elements, {
                 label = "Plant " .. cropConfig.label,
                 value = "plant_" .. cropType,
@@ -484,8 +545,18 @@ function ShowZoneInfo(zoneIndex)
 end
 
 function PlantCrop(cropType, zoneIndex)
+    if not Config or not Config.Crops or not Config.Tools then
+        print("[ez_farming] Config not fully loaded for PlantCrop")
+        return
+    end
+    
     local zone = FarmingZones[zoneIndex]
     local cropConfig = Config.Crops[cropType]
+    
+    if not cropConfig then
+        print("[ez_farming] Invalid crop type: " .. tostring(cropType))
+        return
+    end
     
     -- Check if player has the required tool
     if not HasItem(Config.Tools.hoe.item) then
@@ -607,13 +678,27 @@ end)
 RegisterNetEvent('ez_farming:plantSuccess')
 AddEventHandler('ez_farming:plantSuccess', function(plantData)
     PlantedCrops[plantData.id] = plantData
-    ShowNotification('plant_success', Config.Crops[plantData.cropType].label)
+    
+    -- Safe config access
+    local cropLabel = 'Unknown Crop'
+    if Config and Config.Crops and Config.Crops[plantData.cropType] and Config.Crops[plantData.cropType].label then
+        cropLabel = Config.Crops[plantData.cropType].label
+    end
+    
+    ShowNotification('plant_success', cropLabel)
 end)
 
 RegisterNetEvent('ez_farming:harvestSuccess')
 AddEventHandler('ez_farming:harvestSuccess', function(plantId, harvestData)
     PlantedCrops[plantId] = nil
-    ShowNotification('harvest_success', Config.Crops[harvestData.cropType].label, harvestData.amount)
+    
+    -- Safe config access
+    local cropLabel = 'Unknown Crop'
+    if Config and Config.Crops and Config.Crops[harvestData.cropType] and Config.Crops[harvestData.cropType].label then
+        cropLabel = Config.Crops[harvestData.cropType].label
+    end
+    
+    ShowNotification('harvest_success', cropLabel, harvestData.amount)
 end)
 
 RegisterNetEvent('ez_farming:waterSuccess')

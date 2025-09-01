@@ -10,24 +10,13 @@ shared_scripts {
 }
 
 client_scripts {
+    'debug_config.lua', -- Temporary debug script
     'client/*.lua'
 }
 
 server_scripts {
     '@mysql-async/lib/MySQL.lua', -- Comment this out if not using mysql-async
     'server/*.lua'
-}
-
-dependencies {
-    'es_extended',  -- Optional
-    'qb-core',      -- Optional
-    'qbx_core',     -- Optional
-    'ox_target',    -- Optional
-    'ox_inventory', -- Optional
-    'qb-target',    -- Optional
-    'qb-inventory', -- Optional
-    'ox_lib',       -- Optional
-    'qb-drawtext'   -- Optional
 }
 
 lua54 'yes'

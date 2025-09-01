@@ -29,7 +29,7 @@ Config.Inventory = 'auto' -- 'auto', 'ox_inventory', 'qb-inventory', 'esx_invent
 
 -- Database
 Config.UseDatabase = true
-Config.DatabaseResource = 'mysql-async' -- 'mysql-async', 'oxmysql', 'ghmattimysql'
+Config.DatabaseResource = 'oxmysql' -- 'mysql-async', 'oxmysql', 'ghmattimysql'
 
 -- Farming Zones
 Config.FarmingZones = {
