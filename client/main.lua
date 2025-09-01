@@ -8,12 +8,22 @@ local ConfigReady = false
 
 -- Wait for Config to be available
 CreateThread(function()
-    while not Config do
-        print("[ez_farming] Waiting for Config to load...")
-        Wait(100)
+    local attempts = 0
+    while not Config and attempts < 200 do
+        attempts = attempts + 1
+        if attempts % 50 == 0 then
+            print("[ez_farming] Still waiting for Config to load... (attempt " .. attempts .. ")")
+        end
+        Wait(50)
     end
-    ConfigReady = true
-    print("^2[ez_farming]^7 Config loaded successfully!")
+    
+    if Config then
+        ConfigReady = true
+        print("^2[ez_farming]^7 Config loaded successfully!")
+    else
+        print("^1[ez_farming]^7 ERROR: Config failed to load after " .. attempts .. " attempts!")
+        ConfigReady = false
+    end
 end)
 
 -- Framework Detection and Initialization
@@ -452,43 +462,71 @@ end
 
 -- Farming menu functions
 function OpenFarmingMenu(zoneIndex)
-    if not Config then 
-        print("[ez_farming] Config not loaded yet, please try again...")
-        if Framework and Framework == 'qb' then
-            QBCore.Functions.Notify("System not ready yet, please try again...", "error")
-        elseif Framework and Framework == 'esx' then
-            ESX.ShowNotification("System not ready yet, please try again...")
+    print("^3[ez_farming]^7 OpenFarmingMenu called with zoneIndex: " .. tostring(zoneIndex))
+    
+    if not ConfigReady or not Config then 
+        print("^1[ez_farming]^7 Config not loaded yet, please try again...")
+        local message = "System not ready yet, please try again..."
+        
+        -- Try different notification methods
+        if Framework and Framework == 'qb' and QBCore and QBCore.Functions and QBCore.Functions.Notify then
+            QBCore.Functions.Notify(message, "error")
+        elseif Framework and Framework == 'esx' and ESX and ESX.ShowNotification then
+            ESX.ShowNotification(message)
         else
-            -- Standalone notification
+            -- Fallback to native notification
             BeginTextCommandThefeedPost("STRING")
-            AddTextComponentSubstringPlayerName("System not ready yet, please try again...")
+            AddTextComponentSubstringPlayerName(message)
             EndTextCommandThefeedPostTicker(false, true)
         end
         return 
     end
     
     if not Config.Crops then
-        print("[ez_farming] Config.Crops not available")
+        print("^1[ez_farming]^7 Config.Crops not available")
+        return
+    end
+    
+    if not zoneIndex or zoneIndex < 1 then
+        print("^1[ez_farming]^7 Invalid zone index: " .. tostring(zoneIndex))
         return
     end
     
     local zone = FarmingZones[zoneIndex]
     if not zone then
-        print("[ez_farming] Invalid zone index: " .. tostring(zoneIndex))
+        print("^1[ez_farming]^7 Zone not found for index: " .. tostring(zoneIndex))
+        print("^1[ez_farming]^7 Available zones: " .. tostring(#FarmingZones))
         return
     end
+    
+    print("^2[ez_farming]^7 Opening menu for zone: " .. tostring(zone.name))
     
     local elements = {}
     
     -- Add plant option for each allowed crop
-    for _, cropType in ipairs(zone.allowedCrops) do
-        local cropConfig = Config.Crops[cropType]
-        if cropConfig and HasItem(cropConfig.seedItem) then
-            table.insert(elements, {
-                label = "Plant " .. cropConfig.label,
-                value = "plant_" .. cropType,
-                cropType = cropType
-            })
+    if zone.allowedCrops then
+        for _, cropType in ipairs(zone.allowedCrops) do
+            local cropConfig = Config.Crops[cropType]
+            if cropConfig then
+                -- Check if player has seed item (with error handling)
+                local hasItem = false
+                local success, result = pcall(function()
+                    return HasItem(cropConfig.seedItem)
+                end)
+                if success then
+                    hasItem = result
+                end
+                
+                if hasItem then
+                    table.insert(elements, {
+                        label = "Plant " .. (cropConfig.label or cropType),
+                        value = "plant_" .. cropType,
+                        cropType = cropType
+                    })
+                end
+            else
+                print("^1[ez_farming]^7 Crop config not found for: " .. tostring(cropType))
+            end
         end
     end
     
@@ -496,6 +534,8 @@ function OpenFarmingMenu(zoneIndex)
         label = "View Zone Info",
         value = "zone_info"
     })
+    
+    print("^2[ez_farming]^7 Menu elements created: " .. #elements)
     
     -- Framework-specific menu opening
     if Framework == 'esx' then
