@@ -19,11 +19,15 @@ server_scripts {
 }
 
 dependencies {
-    'es_extended', -- Optional
-    'qb-core',     -- Optional
-    'qbx_core',    -- Optional
-    'ox_target',   -- Optional
-    'ox_inventory' -- Optional
+    'es_extended',  -- Optional
+    'qb-core',      -- Optional
+    'qbx_core',     -- Optional
+    'ox_target',    -- Optional
+    'ox_inventory', -- Optional
+    'qb-target',    -- Optional
+    'qb-inventory', -- Optional
+    'ox_lib',       -- Optional
+    'qb-drawtext'   -- Optional
 }
 
 lua54 'yes'

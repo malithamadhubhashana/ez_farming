@@ -80,6 +80,37 @@ RegisterNUICallback('closeMenu', function(data, cb)
     cb('ok')
 end)
 
+-- QB-Target event handlers
+RegisterNetEvent('ez_farming:openFarmingMenuTarget')
+AddEventHandler('ez_farming:openFarmingMenuTarget', function(data)
+    local zoneIndex = data.zoneIndex
+    if zoneIndex then
+        OpenFarmingMenu(zoneIndex)
+    end
+end)
+
+RegisterNetEvent('ez_farming:openShopMenuTarget')
+AddEventHandler('ez_farming:openShopMenuTarget', function(data)
+    local shopIndex = data.shopIndex
+    if shopIndex then
+        OpenShopMenu(shopIndex)
+    end
+end)
+
+RegisterNetEvent('ez_farming:plantActionTarget')
+AddEventHandler('ez_farming:plantActionTarget', function(data)
+    local action = data.action
+    local plantId = data.plantId
+    
+    if action == 'water' then
+        WaterPlant(plantId)
+    elseif action == 'fertilize' then
+        FertilizePlant(plantId)
+    elseif action == 'harvest' then
+        HarvestPlant(plantId)
+    end
+end)
+
 RegisterNUICallback('menuAction', function(data, cb)
     local action = data.action
     local value = data.value
@@ -647,11 +678,24 @@ CreateThread(function()
                                 options = options
                             })
                         elseif targetResource == 'qb-target' then
+                            -- Convert ox_target options format to qb-target format
+                            local qbOptions = {}
+                            for _, option in pairs(options) do
+                                table.insert(qbOptions, {
+                                    type = "client",
+                                    event = "ez_farming:plantActionTarget",
+                                    icon = option.icon,
+                                    label = option.label,
+                                    action = option.name,
+                                    plantId = plantId
+                                })
+                            end
+                            
                             exports['qb-target']:AddCircleZone('plant_' .. plantId, plant.coords, 1.0, {
                                 name = 'plant_' .. plantId,
                                 debugPoly = Config.Debug,
                             }, {
-                                options = options,
+                                options = qbOptions,
                                 distance = Config.MaxDistance
                             })
                         end

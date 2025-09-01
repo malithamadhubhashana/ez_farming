@@ -64,6 +64,70 @@ A test file `test_framework.lua` is included to help validate framework detectio
 - **Target System**: ox_target (recommended) or qb-target
 - **Framework**: ESX, QB-Core, QBX, or Standalone
 
+### Inventory System Support
+
+The script automatically detects and supports multiple inventory systems:
+
+**Priority Order**: ox_inventory → qb-inventory → framework default
+
+#### ox_inventory (Recommended)
+- Full integration with metadata support
+- Use items from `ox_inventory_items.lua`
+- Best performance and features
+
+#### qb-inventory (QB-Core)
+- Native QB-Core inventory support
+- Add items from `qb_inventory_items.lua` to your `qb-core/shared/items.lua`
+- Compatible with QB-Core framework
+
+#### Framework Default
+- ESX: Uses native ESX inventory system
+- QB-Core: Uses QB-Core player data items
+- QBX: Defaults to ox_inventory (recommended setup)
+
+### Target System Support
+
+**Priority Order**: ox_target → qb-target → drawtext fallback
+
+- **ox_target**: Modern, optimized target system (recommended)
+- **qb-target**: Original QB-Core target system
+- **Drawtext**: Fallback system if no target resource is found
+
+### Drawtext System Support
+
+**Priority Order**: ox_lib → qb-drawtext → native GTA drawtext
+
+When target systems are not available or disabled, the script automatically uses drawtext systems:
+
+#### ox_lib Drawtext
+- Modern, customizable text UI
+- Rich formatting options
+- Position controls and icons
+
+#### qb-drawtext
+- Original QB-Core drawtext system
+- Simple, reliable text display
+- Basic positioning options
+
+#### Native GTA Drawtext
+- Built-in GTA drawtext system
+- Always available fallback
+- Basic 3D world text display
+
+**Configuration:**
+```lua
+Config.UseTarget = false -- Set to false to use drawtext instead
+Config.DrawTextSystem = 'auto' -- 'auto', 'ox_lib', 'qb-drawtext', 'native'
+Config.DrawText = {
+    enabled = true,
+    showControls = true, -- Show [E] key prompts
+    position = 'top-center', -- ox_lib position
+    font = 0, -- GTA font for native
+    scale = 0.35, -- Text scale for native
+    color = {255, 255, 255, 255} -- RGBA for native
+}
+```
+
 ### Setup Steps
 
 1. **Download and Extract**

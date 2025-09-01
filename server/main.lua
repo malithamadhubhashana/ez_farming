@@ -432,14 +432,21 @@ function RemoveItem(playerId, item, amount)
     local Player = GetPlayerFromId(playerId)
     if not Player then return false end
     
-    -- Check if using ox_inventory
-    if Config.UseOxInventory and GetResourceState('ox_inventory') == 'started' then
+    -- Inventory system priority: ox_inventory > qb-inventory > framework default
+    if GetResourceState('ox_inventory') == 'started' then
         return exports.ox_inventory:RemoveItem(playerId, item, amount)
+    elseif GetResourceState('qb-inventory') == 'started' and Framework == 'qb' then
+        -- Use qb-inventory if available
+        local success = exports['qb-inventory']:RemoveItem(playerId, item, amount)
+        return success
     elseif Framework == 'esx' then
         Player.removeInventoryItem(item, amount)
         return true
-    elseif Framework == 'qb' or Framework == 'qbx' then
+    elseif Framework == 'qb' then
         return Player.Functions.RemoveItem(item, amount)
+    elseif Framework == 'qbx' then
+        -- QBX uses ox_inventory by default
+        return exports.ox_inventory:RemoveItem(playerId, item, amount)
     else
         -- Standalone - implement your own inventory removal
         return true
@@ -451,9 +458,13 @@ function AddItem(playerId, item, amount, metadata)
     local Player = GetPlayerFromId(playerId)
     if not Player then return false end
     
-    -- Check if using ox_inventory first
-    if Config.UseOxInventory and exports.ox_inventory then
+    -- Inventory system priority: ox_inventory > qb-inventory > framework default
+    if GetResourceState('ox_inventory') == 'started' then
         return exports.ox_inventory:AddItem(playerId, item, amount, metadata)
+    elseif GetResourceState('qb-inventory') == 'started' and Framework == 'qb' then
+        -- Use qb-inventory if available
+        local success = exports['qb-inventory']:AddItem(playerId, item, amount, nil, metadata)
+        return success
     elseif Framework == 'esx' then
         Player.addInventoryItem(item, amount)
         return true

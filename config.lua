@@ -5,12 +5,24 @@ Config.Framework = 'auto' -- 'esx', 'qb', 'qbx', 'standalone', 'auto'
 
 -- General Settings
 Config.Debug = true
-Config.UseTarget = true -- Set to false to use drawtext/markers instead of target system (ox_target/qb-target)
-Config.UseOxInventory = true -- Enable ox_inventory integration
+Config.UseTarget = true -- Set to false to use drawtext/markers instead of target system
+Config.TargetSystem = 'auto' -- 'auto', 'ox_target', 'qb-target'
+Config.DrawTextSystem = 'auto' -- 'auto', 'ox_lib', 'qb-drawtext', 'native'
+Config.UseOxInventory = true -- Enable ox_inventory integration (will fallback to qb-inventory or framework inventory)
 Config.MaxDistance = 2.0 -- Max distance to interact with farming zones
 Config.PlantGrowthTime = 300 -- Time in seconds for plants to grow (5 minutes for testing)
 Config.WateringInterval = 120 -- Time in seconds before plant needs watering again
 Config.FertilizerBonus = 0.25 -- 25% faster growth with fertilizer
+
+-- Drawtext Settings (when target systems are not available)
+Config.DrawText = {
+    enabled = true,
+    showControls = true, -- Show key prompts
+    position = 'top-center', -- ox_lib: 'top-center', 'center', etc.
+    font = 0, -- GTA font ID for native drawtext
+    scale = 0.35, -- Text scale for native drawtext
+    color = {255, 255, 255, 255}, -- RGBA color for native drawtext
+}
 
 -- Inventory System
 Config.Inventory = 'auto' -- 'auto', 'ox_inventory', 'qb-inventory', 'esx_inventoryhud'

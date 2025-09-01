@@ -61,6 +61,21 @@ local function TestFrameworkDetection()
         print("^7ox_inventory not detected")
     end
     
+    -- Test qb-inventory
+    if GetResourceState('qb-inventory') == 'started' then
+        print("^3qb-inventory detected and running")
+        local success, result = pcall(function()
+            return exports['qb-inventory']
+        end)
+        if success and result then
+            print("^2qb-inventory exports are accessible")
+        else
+            print("^1qb-inventory exports failed to load")
+        end
+    else
+        print("^7qb-inventory not detected")
+    end
+    
     -- Test ox_target
     if GetResourceState('ox_target') == 'started' then
         print("^3ox_target detected and running")
@@ -68,6 +83,15 @@ local function TestFrameworkDetection()
         print("^3qb-target detected and running")
     else
         print("^7No target system detected")
+    end
+    
+    -- Test drawtext systems
+    if GetResourceState('ox_lib') == 'started' then
+        print("^3ox_lib detected and running (supports drawtext)")
+    elseif GetResourceState('qb-drawtext') == 'started' then
+        print("^3qb-drawtext detected and running")
+    else
+        print("^7No advanced drawtext system detected - using native")
     end
 end
 
@@ -118,13 +142,24 @@ local function TestInventoryFunctions()
         -- Test ox_inventory
         if GetResourceState('ox_inventory') == 'started' then
             local success, result = pcall(function()
-                -- Just test if the export exists, don't actually call it
                 return exports.ox_inventory.AddItem ~= nil
             end)
             if success then
                 print("^2ox_inventory AddItem function is available")
             else
                 print("^1ox_inventory AddItem function is not available")
+            end
+        end
+        
+        -- Test qb-inventory
+        if GetResourceState('qb-inventory') == 'started' then
+            local success, result = pcall(function()
+                return exports['qb-inventory'].AddItem ~= nil
+            end)
+            if success then
+                print("^2qb-inventory AddItem function is available")
+            else
+                print("^1qb-inventory AddItem function is not available")
             end
         end
     end)

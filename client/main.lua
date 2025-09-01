@@ -141,8 +141,13 @@ end
 function HasItem(item, amount)
     amount = amount or 1
     
-    if Config.UseOxInventory and GetResourceState('ox_inventory') == 'started' then
+    -- Inventory system priority: ox_inventory > qb-inventory > framework default
+    if GetResourceState('ox_inventory') == 'started' then
         return exports.ox_inventory:Search('count', item) >= amount
+    elseif GetResourceState('qb-inventory') == 'started' and Framework == 'qb' then
+        -- Use qb-inventory if available
+        local hasItem = exports['qb-inventory']:HasItem(item, amount)
+        return hasItem ~= nil and hasItem
     elseif Framework == 'esx' then
         local itemCount = ESX.SearchInventory(item, false)
         return itemCount and itemCount >= amount
@@ -162,7 +167,7 @@ function HasItem(item, amount)
         local Player = exports.qbx_core:GetPlayerData()
         if not Player then return false end
         
-        -- Check if ox_inventory is available
+        -- Check if ox_inventory is available (should always be for QBX)
         if exports.ox_inventory then
             return exports.ox_inventory:Search('count', item) >= amount
         end
@@ -199,6 +204,9 @@ function InitializeFarming()
     
     -- Request planted crops from server
     TriggerServerEvent('ez_farming:requestPlantedCrops')
+    
+    -- Trigger drawtext system initialization
+    TriggerEvent('ez_farming:clientReady')
     
     -- Start main threads
     CreateThread(MainThread)

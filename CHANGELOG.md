@@ -1,5 +1,73 @@
 # EZ Farming - Framework Compatibility Changelog
 
+## Version 1.3 - Drawtext Systems Support
+
+### New Drawtext System Integration
+**Multi-Drawtext Support:**
+- ✅ Added ox_lib drawtext integration with modern UI
+- ✅ Added qb-drawtext support for QB-Core servers
+- ✅ Native GTA drawtext fallback system
+- ✅ Automatic detection and priority system: ox_lib → qb-drawtext → native
+
+**Drawtext Features:**
+- ✅ Configurable drawtext system selection
+- ✅ Rich text formatting and positioning options
+- ✅ Interactive farming zone text prompts
+- ✅ Dynamic plant status indicators
+- ✅ Shop interaction text displays
+
+**Enhanced Fallback System:**
+- ✅ Seamless target → drawtext fallback
+- ✅ Automatic system detection and initialization
+- ✅ Customizable display settings and controls
+- ✅ Performance-optimized text rendering
+
+### Configuration Enhancements
+**New Config Options:**
+- ✅ `Config.DrawTextSystem` - Choose drawtext system
+- ✅ `Config.DrawText` - Comprehensive drawtext settings
+- ✅ Position, font, scale, and color controls
+- ✅ Enable/disable controls and interaction prompts
+
+### Framework Improvements
+**Dependencies Updated:**
+- ✅ Added ox_lib and qb-drawtext to optional dependencies
+- ✅ Enhanced resource detection and initialization
+- ✅ Better compatibility across different UI setups
+
+## Version 1.2 - QB-Target & QB-Inventory Support
+
+### New Inventory System Support
+**QB-Inventory Integration:**
+- ✅ Added native qb-inventory compatibility alongside ox_inventory
+- ✅ Created `qb_inventory_items.lua` with complete item definitions
+- ✅ Implemented priority system: ox_inventory → qb-inventory → framework default
+- ✅ Enhanced HasItem() function to support qb-inventory exports
+
+**Multi-Inventory Detection:**
+- ✅ Automatic detection of available inventory systems
+- ✅ Seamless fallback between inventory types
+- ✅ Improved error handling for missing inventory resources
+
+### New Target System Support
+**QB-Target Integration:**
+- ✅ Added full qb-target support alongside ox_target
+- ✅ Created proper event handlers for qb-target interactions
+- ✅ Implemented zone conversion between ox_target and qb-target formats
+- ✅ Enhanced target system detection and fallback
+
+**Target System Improvements:**
+- ✅ Priority system: ox_target → qb-target → drawtext fallback
+- ✅ Proper zone creation for both target systems
+- ✅ Dynamic plant interaction targets for both systems
+- ✅ Shop and farming zone targets for both systems
+
+### Framework Enhancements
+**Dependencies Updated:**
+- ✅ Added qb-target and qb-inventory to fxmanifest dependencies
+- ✅ Enhanced resource detection and initialization
+- ✅ Better compatibility across different server setups
+
 ## Version 1.1 - Documentation Compliance Update
 
 ### QBX Framework Corrections
